@@ -348,6 +348,7 @@ Status NvmFile::Flush(bool padded) {
     return Status::OK();
   }*/
 
+  // rocky: 여기다!!
   if (buf_nbytes_ < stripe_nbytes_) {
     NVM_DBG(this, "Nothing to flush (buffer less than striped_nbytes_)");
     return Status::OK();

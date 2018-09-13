@@ -56,6 +56,7 @@ Status NvmStore::recover(const std::string& mpath)
 {
   NVM_DBG(this, "mpath(" << mpath << ")");
 
+#if 0
   // Initialize and allocate vblks with defaults (kFree)
   for (size_t blk_idx = 0; blk_idx < geo_->nblocks; ++blk_idx) {
     struct nvm_vblk *blk;
@@ -73,6 +74,36 @@ Status NvmStore::recover(const std::string& mpath)
 
     blks_.push_back(std::make_pair(kFree, blk));
   }
+#endif
+
+// rocky
+#if 1
+	std::vector<struct nvm_addr> addrs(punits_);
+	
+	for(size_t vblk_idx = 0; vblk_idx < (geo_->nblocks)/4; ++vblk_idx){
+		for(size_t punit_idx = 0; punit_idx < punits_.size(); punit_idx++){
+			std::vector<struct nvm_addr> resized_addrs;
+			struct nvm_vblk *blk;
+
+			for(int i = 0; i < 4; i++){
+				addrs[punit_idx].g.blk = 4 * vblk_idx + i;
+				resized_addrs.push_back(addrs[punit_idx]);
+			}
+		
+			blk = nvm_vblk_alloc(dev_, resized_addrs.data(), resized_addrs.size());
+			
+			if (!blk) {
+				NVM_DBG(this, "FAILED: nvm_vblk_alloc_line");
+				return Status::IOError("FAILED: nvm_vblk_alloc_line");
+			}
+
+			blks_.push_back(std::make_pair(kFree, blk));
+		}	
+	}
+		
+
+#endif
+
 
   if (!env_->posix_->FileExists(mpath).ok()) {          // DONE
     NVM_DBG(this, "INFO: mpath does not exist, nothing to recover.");
@@ -152,25 +183,26 @@ Status NvmStore::recover(const std::string& mpath)
   // Recover blk states
   {
     std::string line;
-    size_t blk_idx;
+    //size_t blk_idx;
+    size_t vblk_idx;
 
-    for (blk_idx = 0; meta >> line; ++blk_idx) {
+    for (vblk_idx = 0; meta >> line; ++vblk_idx) {
 
-      if ((blk_idx+1) > geo_->nblocks) {
+      if ((vblk_idx+1) > ((geo_->nblocks)/4)*punits_.size() ) {
         NVM_DBG(this, "FAILED: Block count exceeding geometry");
         return Status::IOError("FAILED: Block count exceeding geometry");
       }
 
       int state = strtoul(line.c_str(), NULL, 16);
 
-      NVM_DBG(this, "blk_idx:" << blk_idx << ", line: " << line);
+      NVM_DBG(this, "vblk_idx:" << vblk_idx << ", line: " << line);
 
       switch(state) {
         case kFree:
         case kOpen:
         case kReserved:
         case kBad:
-          blks_[blk_idx].first = BlkState(state);
+          blks_[vblk_idx].first = BlkState(state);
           break;
 
         default:
@@ -178,7 +210,7 @@ Status NvmStore::recover(const std::string& mpath)
       }
     }
 
-    if (blk_idx != geo_->nblocks) {
+    if (vblk_idx != ((geo_->nblocks)/4)*punits_.size()) {
       NVM_DBG(this, "FAILED: Insufficient block count");
       return Status::IOError("FAILED: Insufficient block count");
     }
@@ -234,16 +266,17 @@ struct nvm_vblk* NvmStore::get(void) {
   MutexLock lock(&mutex_);
   NVM_DBG(this, "LOCK !");
 
-  for (size_t i = 0; i < geo_->nblocks; ++i) {
-    const size_t blk_idx = curs_++ % geo_->nblocks;
-    std::pair<BlkState, struct nvm_vblk*> &entry = blks_[blk_idx];
+  for (size_t i = 0; i < ((geo_->nblocks)/4)*punits_.size(); ++i) {
+    //const size_t blk_idx = curs_++ % geo_->nblocks;
+    const size_t vblk_idx = curs_++ % (((geo_->nblocks)/4)*punits_.size());
+    std::pair<BlkState, struct nvm_vblk*> &entry = blks_[vblk_idx];
 
     switch (entry.first) {
     case kFree:
       if (nvm_vblk_erase(entry.second) < 0) {
         entry.first = kBad;
 
-        NVM_DBG(this, "WARN: Erase failed blk_idx(" << blk_idx << ")");
+        NVM_DBG(this, "WARN: Erase failed vblk_idx(" << vblk_idx << ")");
 
         if (!persist(mpath_).ok()) {
           NVM_DBG(this, "FAILED: writing meta");
