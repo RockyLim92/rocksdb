@@ -400,7 +400,8 @@ Status NvmFile::Flush(bool padded) {
     NVM_DBG(this, "nbytes: " << nbytes);
 
     ret = nvm_vblk_write(blk, buf_ + nbytes_written, nbytes);
-    if (ret < 0) {
+    
+		if (ret < 0) {
       perror("nvm_vblk_write");
       nvm_vblk_pr(blk);
       NVM_DBG(this, "FAILED: nvm_vblk_write(...)");

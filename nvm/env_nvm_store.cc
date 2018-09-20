@@ -80,13 +80,13 @@ Status NvmStore::recover(const std::string& mpath)
 #if 1
 	std::vector<struct nvm_addr> addrs(punits_);
 	
-	for(size_t vblk_idx = 0; vblk_idx < (geo_->nblocks)/4; ++vblk_idx){
+	for(size_t vblk_idx = 0; vblk_idx < (geo_->nblocks)/20; ++vblk_idx){
 		for(size_t punit_idx = 0; punit_idx < punits_.size(); punit_idx++){
 			std::vector<struct nvm_addr> resized_addrs;
 			struct nvm_vblk *blk;
 
-			for(int i = 0; i < 4; i++){
-				addrs[punit_idx].g.blk = 4 * vblk_idx + i;
+			for(int i = 0; i < 20; i++){
+				addrs[punit_idx].g.blk = 20 * vblk_idx + i;
 				resized_addrs.push_back(addrs[punit_idx]);
 			}
 		
@@ -100,7 +100,8 @@ Status NvmStore::recover(const std::string& mpath)
 			blks_.push_back(std::make_pair(kFree, blk));
 		}	
 	}
-		
+
+	NVM_DBG(this, "[rocky] blks_.size(" << blks_.size() << ")");
 
 #endif
 
@@ -188,7 +189,7 @@ Status NvmStore::recover(const std::string& mpath)
 
     for (vblk_idx = 0; meta >> line; ++vblk_idx) {
 
-      if ((vblk_idx+1) > ((geo_->nblocks)/4)*punits_.size() ) {
+      if ((vblk_idx+1) > ((geo_->nblocks)/20)*punits_.size() ) {
         NVM_DBG(this, "FAILED: Block count exceeding geometry");
         return Status::IOError("FAILED: Block count exceeding geometry");
       }
@@ -210,7 +211,10 @@ Status NvmStore::recover(const std::string& mpath)
       }
     }
 
-    if (vblk_idx != ((geo_->nblocks)/4)*punits_.size()) {
+      NVM_DBG(this, "[rocky] ((geo_->nblocks)/20)*punits_.size()" << ((geo_->nblocks)/4)*punits_.size() );
+			
+
+    if (vblk_idx != ((geo_->nblocks)/20)*punits_.size()) {
       NVM_DBG(this, "FAILED: Insufficient block count");
       return Status::IOError("FAILED: Insufficient block count");
     }
@@ -266,9 +270,9 @@ struct nvm_vblk* NvmStore::get(void) {
   MutexLock lock(&mutex_);
   NVM_DBG(this, "LOCK !");
 
-  for (size_t i = 0; i < ((geo_->nblocks)/4)*punits_.size(); ++i) {
+  for (size_t i = 0; i < ((geo_->nblocks)/20)*punits_.size(); ++i) {
     //const size_t blk_idx = curs_++ % geo_->nblocks;
-    const size_t vblk_idx = curs_++ % (((geo_->nblocks)/4)*punits_.size());
+    const size_t vblk_idx = curs_++ % (((geo_->nblocks)/20)*punits_.size());
     std::pair<BlkState, struct nvm_vblk*> &entry = blks_[vblk_idx];
 
     switch (entry.first) {
