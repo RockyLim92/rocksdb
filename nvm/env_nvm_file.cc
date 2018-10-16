@@ -40,7 +40,9 @@ NvmFile::NvmFile(
 
   const struct nvm_geo *geo = nvm_dev_get_geo(env_->store_->GetDev());
 
+	// rocky: *.sst.meta 파일이 있으면 읽음.
   if (env_->posix_->FileExists(mpath_).ok()) {          // Read meta from file
+		NVM_DBG(this, "[rocky] read meta from file");
     std::string content;
     size_t blk_idx;
 
@@ -48,7 +50,6 @@ NvmFile::NvmFile(
       NVM_DBG(this, "FAILED: ReadFileToString");
       throw std::runtime_error("FAILED: ReadFileToString");
     }
-
     std::istringstream meta(content);
 
     if (!(meta >> fsize_)) {                            // Read fsize
@@ -56,7 +57,9 @@ NvmFile::NvmFile(
       throw std::runtime_error("FAILED: parsing file size from meta");
     }
 
-    while(meta >> blk_idx) {
+		while(meta >> blk_idx) {
+				
+      NVM_DBG(this, "[rocky] read blk_idx from meta file - blk_idx" << blk_idx );
       struct nvm_vblk *blk;
 
       blk = env_->store_->get_reserved(blk_idx);
@@ -65,14 +68,18 @@ NvmFile::NvmFile(
         NVM_DBG(this, "FAILED: allocating vblk");
         throw std::runtime_error("FAILED: allocating vblk");
       }
-
+  
+			// rocky: 왜 일로 안들어가지?
+      NVM_DBG(this, "blks_push_back(blk)");
       blks_.push_back(blk);
     }
   }
 
+  // rocky: 여기 고쳐줘야 할 것 같은데
   align_nbytes_ = geo->nplanes * geo->nsectors * geo->sector_nbytes;
-  stripe_nbytes_ = align_nbytes_ * env_->store_->GetPunitCount();
-  blk_nbytes_ = stripe_nbytes_ * geo->npages;
+  //stripe_nbytes_ = align_nbytes_ * env_->store_->GetPunitCount();
+  stripe_nbytes_ = align_nbytes_ * 20;
+  blk_nbytes_ = stripe_nbytes_ * geo->npages;// 2GB 크기로 잡혀있음.
 
   buf_nbytes_ = 0;                              // Setup buffer
   buf_nbytes_max_ = lu_bound_ * stripe_nbytes_;
@@ -295,20 +302,25 @@ Status NvmFile::Append(const Slice& slice) {
 Status NvmFile::wmeta(void) {
   std::stringstream meta;
 
+  NVM_DBG(this, "[rocky] std::to_string(fsize_): " << std::to_string(fsize_));
   meta << std::to_string(fsize_) << std::endl;;
-
+  
+  NVM_DBG(this, "[rocky] blks_.size() " << blks_.size());
   for (auto &blk : blks_) {
     if (!blk)
       continue;
-
+		
+		// 여기에 vblk을 구성하는 blk들 중 0번째 blk의 number를 저장한다.
+    //NVM_DBG(this, "[rocky] nvm_vblk_get_addrs(blk)[0].g.blk: " << nvm_vblk_get_addrs(blk)[0].g.blk);
+    
+    //vblk의 번호를 주어야 찾아갈 수 있다.
+    
     meta << nvm_vblk_get_addrs(blk)[0].g.blk << std::endl;
   }
 
   std::string content = meta.str();
   Slice slice(content.c_str(), content.size());
-
-  NVM_DBG(this, "meta: " << content);
-
+  
   return WriteStringToFile(env_->posix_, slice, mpath_, true);
 }
 
@@ -367,21 +379,31 @@ Status NvmFile::Flush(bool padded) {
                 "unaligned_nbytes(" << unaligned_nbytes << ")");
 
   // Ensure that enough blocks are reserved for flushing buffer
+    
   while (blks_.size() <= (fsize_ / blk_nbytes_)) {
     struct nvm_vblk *blk;
 
+    // rocky: get!!
     blk = env_->store_->get();
     if (!blk) {
       NVM_DBG(this, "FAILED: reserving NVM");
       return Status::IOError("FAILED: reserving NVM");
     }
-
-    blks_.push_back(blk);
+		
+		// rocky: 이게 계속 0으로 들어가니 meta에서도 0으로만 나옴
+		NVM_DBG(this, "[rocky] ch: " << nvm_vblk_get_addrs(blk)[0].g.ch );
+		NVM_DBG(this, "[rocky] lun: " << nvm_vblk_get_addrs(blk)[0].g.lun );
+		NVM_DBG(this, "[rocky] blk: " << nvm_vblk_get_addrs(blk)[0].g.blk );
+      
+    NVM_DBG(this, "blks_push_back(blk)");
+		blks_.push_back(blk);
 
     NVM_DBG(this, "avail: " << blk_nbytes_ - nvm_vblk_get_pos_write(blk));
   }
 
-  size_t offset = fsize_ - (buf_nbytes_ - pad_nbytes);
+  NVM_DBG(this, "[rocky] blks_.size() " << blks_.size());
+  
+	size_t offset = fsize_ - (buf_nbytes_ - pad_nbytes);
   size_t nbytes_remaining = flush_tbytes;
   size_t nbytes_written = 0;
 
@@ -392,6 +414,7 @@ Status NvmFile::Flush(bool padded) {
     size_t nbytes = std::min(nbytes_remaining, avail);
     ssize_t ret;
 
+    NVM_DBG(this, "[rocky] blk_nbytes_:" << blk_nbytes_);
     NVM_DBG(this, "blk_idx: " << blk_idx);
     NVM_DBG(this, "pos:" << nvm_vblk_get_pos_write(blk));
     NVM_DBG(this, "avail: " << avail);
@@ -400,9 +423,9 @@ Status NvmFile::Flush(bool padded) {
     NVM_DBG(this, "nbytes: " << nbytes);
 
     ret = nvm_vblk_write(blk, buf_ + nbytes_written, nbytes);
-    
+
 		if (ret < 0) {
-      perror("nvm_vblk_write");
+			perror("nvm_vblk_write");
       nvm_vblk_pr(blk);
       NVM_DBG(this, "FAILED: nvm_vblk_write(...)");
       return Status::IOError("FAILED: nvm_vblk_write(...)");
@@ -538,6 +561,8 @@ Status NvmFile::Read(
     uint64_t blk_idx = read_offset / blk_nbytes_;
     uint64_t blk_offset = read_offset % blk_nbytes_;
     struct nvm_vblk *blk = blks_[blk_idx];
+    NVM_DBG(this, "[rocky] blks_.size() " << blks_.size());
+
     uint64_t nbytes = std::min({
       nbytes_remaining,
       blk_nbytes_ - blk_offset,

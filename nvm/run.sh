@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 
 RBENCH_DEV_NAME='nvme0n1'
-RBENCH_BENCHMARKS='fillseq'
+RBENCH_BENCHMARKS='fillrandom'
 RBENCH_DEV_MODE='nvm'
+
+RBENCH_USE_EXISTING_DB=0
 
 if [ $UID != 0 ]; then
 	echo "You don't have sufficient privileges to run this script."
@@ -38,7 +40,7 @@ legacy)
 		mount "/dev/$RBENCH_DEV_NAME" $RBENCH_DB
 	fi
 ;;
-pblk)
+pblk)l
 	RBENCH_USE_DIRECT_READS=true
 	RBENCH_USE_DIRECT_IO_FOR_FLUSH_AND_COMPACTION=true
 
@@ -74,14 +76,14 @@ GB=$((1024 * MB))
 #RBENCH_CMD_PREFIX="taskset -c 0-$(nproc)"
 #RBENCH_CMD_PREFIX="valgrind"
 RBENCH_BIN="../db_bench"
-RBENCH_NUM=1000
+RBENCH_NUM=5000
 RBENCH_VALUE_SIZE=$((1 * MB))
 RBENCH_BLOCK_SIZE=$((64 * KB)) # 4k
 RBENCH_BLOOM_BITS=10
 RBENCH_CACHE_SIZE=$((1 * MB))
 #RBENCH_RANDOM_ACCESS_MAX_BUFFER_SIZE=$((128 * MB)) # 1m
 #RBENCH_WRITABLE_FILE_MAX_BUFFER_SIZE=$((128 * MB)) # 1m
-#RBENCH_WRITE_BUFFER_SIZE=$((2000 * MB))
+RBENCH_WRITE_BUFFER_SIZE=$((256 * MB))
 RBENCH_MAX_WRITE_BUFFER_NUMBER=2
 RBENCH_MIN_WRITE_BUFFER_NUMBER_TO_MERGE=1
 RBENCH_TARGET_FILE_SIZE_MULTIPLIER=1
@@ -109,8 +111,7 @@ RBENCH_STATS_PER_INTERVAL=1
 RBENCH_SYNC=0
 RBENCH_THREADS=1
 #RBENCH_THREADS=$(nproc)
-#RBENCH_VERIFY_CHECKSUM=true
+RBENCH_VERIFY_CHECKSUM=true
 
 source rbench.sh
-rbench                          # Run them
-
+time rbench                          # Run them

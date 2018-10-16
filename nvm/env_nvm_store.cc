@@ -1,6 +1,10 @@
 #include "env_nvm.h"
 #include <exception>
 
+#define PHYBLK_PER_VBLK 20
+#define NR_LUN_FOR_VBLK 2
+size_t PHYBLK_PER_LUN = PHYBLK_PER_VBLK/NR_LUN_FOR_VBLK;
+
 namespace rocksdb {
 
 //
@@ -76,35 +80,40 @@ Status NvmStore::recover(const std::string& mpath)
   }
 #endif
 
-// rocky
 #if 1
-	std::vector<struct nvm_addr> addrs(punits_);
-	
-	for(size_t vblk_idx = 0; vblk_idx < (geo_->nblocks)/20; ++vblk_idx){
-		for(size_t punit_idx = 0; punit_idx < punits_.size(); punit_idx++){
-			std::vector<struct nvm_addr> resized_addrs;
-			struct nvm_vblk *blk;
+  for(size_t vblk_idx = 0; vblk_idx < (geo_->nblocks)/PHYBLK_PER_LUN; ++vblk_idx){ // 1020/10
+    for(size_t vpunit_idx = 0; vpunit_idx < punits_.size()/NR_LUN_FOR_VBLK; vpunit_idx++){
+      
+      std::vector<struct nvm_addr> addrs(punits_);
+      std::vector<struct nvm_addr> resized_addrs;
+      for(size_t punit_offset = 0; punit_offset < NR_LUN_FOR_VBLK; punit_offset++){//2
+        for(size_t blk_offset = 0; blk_offset < PHYBLK_PER_LUN; blk_offset++){//10
+          
+          size_t no_blk = (vblk_idx * PHYBLK_PER_LUN) + blk_offset;
+          size_t no_punit = (vpunit_idx * NR_LUN_FOR_VBLK) + punit_offset;
+          
+          addrs[no_punit].g.blk = no_blk;   
+          resized_addrs.push_back(addrs[no_punit]);
 
-			for(int i = 0; i < 20; i++){
-				addrs[punit_idx].g.blk = 20 * vblk_idx + i;
-				resized_addrs.push_back(addrs[punit_idx]);
-			}
-		
-			blk = nvm_vblk_alloc(dev_, resized_addrs.data(), resized_addrs.size());
-			
+        }
+      }
+
+      struct nvm_vblk *blk = nvm_vblk_alloc(dev_, resized_addrs.data(), resized_addrs.size());
+     
+		 	NVM_DBG(this, "[rocky] nvm_vblk_get_addrs(blk)[0].g.blk: " << nvm_vblk_get_addrs(blk)[0].g.blk);
+		 	NVM_DBG(this, "[rocky] nvm_vblk_get_addrs(blk)[PHYBLK_PER_VBLK-1].g.blk: " << nvm_vblk_get_addrs(blk)[PHYBLK_PER_VBLK-1].g.blk);
+
+
 			if (!blk) {
 				NVM_DBG(this, "FAILED: nvm_vblk_alloc_line");
 				return Status::IOError("FAILED: nvm_vblk_alloc_line");
 			}
 
 			blks_.push_back(std::make_pair(kFree, blk));
-		}	
-	}
-
+    }
+  }
 	NVM_DBG(this, "[rocky] blks_.size(" << blks_.size() << ")");
-
 #endif
-
 
   if (!env_->posix_->FileExists(mpath).ok()) {          // DONE
     NVM_DBG(this, "INFO: mpath does not exist, nothing to recover.");
@@ -189,7 +198,7 @@ Status NvmStore::recover(const std::string& mpath)
 
     for (vblk_idx = 0; meta >> line; ++vblk_idx) {
 
-      if ((vblk_idx+1) > ((geo_->nblocks)/20)*punits_.size() ) {
+      if ((vblk_idx+1) > ((geo_->nblocks)/PHYBLK_PER_VBLK)*punits_.size() ) {
         NVM_DBG(this, "FAILED: Block count exceeding geometry");
         return Status::IOError("FAILED: Block count exceeding geometry");
       }
@@ -211,14 +220,10 @@ Status NvmStore::recover(const std::string& mpath)
       }
     }
 
-      NVM_DBG(this, "[rocky] ((geo_->nblocks)/20)*punits_.size()" << ((geo_->nblocks)/4)*punits_.size() );
-			
-
-    if (vblk_idx != ((geo_->nblocks)/20)*punits_.size()) {
+    if (vblk_idx != ((geo_->nblocks)/PHYBLK_PER_VBLK)*punits_.size()) {
       NVM_DBG(this, "FAILED: Insufficient block count");
       return Status::IOError("FAILED: Insufficient block count");
     }
-
   }
 
   return Status::OK();
@@ -270,11 +275,16 @@ struct nvm_vblk* NvmStore::get(void) {
   MutexLock lock(&mutex_);
   NVM_DBG(this, "LOCK !");
 
-  for (size_t i = 0; i < ((geo_->nblocks)/20)*punits_.size(); ++i) {
-    //const size_t blk_idx = curs_++ % geo_->nblocks;
-    const size_t vblk_idx = curs_++ % (((geo_->nblocks)/20)*punits_.size());
-    std::pair<BlkState, struct nvm_vblk*> &entry = blks_[vblk_idx];
+  for (size_t i = 0; i < ((geo_->nblocks)/PHYBLK_PER_VBLK)*punits_.size(); i++) {
+    const size_t vblk_idx = curs_++ % (((geo_->nblocks)/PHYBLK_PER_LUN) * (punits_.size()/NR_LUN_FOR_VBLK));
+		
+		std::pair<BlkState, struct nvm_vblk*> &entry = blks_[vblk_idx];
 
+    int target_st_lun_no = (vblk_idx % (punits_.size()/NR_LUN_FOR_VBLK)) * NR_LUN_FOR_VBLK ;
+    NVM_DBG(this, "[rocky] ch: " << target_st_lun_no % 16 << " lun: " << target_st_lun_no / 16 );
+    NVM_DBG(this, "[rocky] st_lun_no: " << target_st_lun_no  );
+    NVM_DBG(this, "[rocky] st_blk_no: " << nvm_vblk_get_addrs(entry.second)[0].g.blk);
+    
     switch (entry.first) {
     case kFree:
       if (nvm_vblk_erase(entry.second) < 0) {
@@ -294,7 +304,9 @@ struct nvm_vblk* NvmStore::get(void) {
       if (!persist(mpath_).ok()) {
         NVM_DBG(this, "FAILED: writing meta");
       }
-      return entry.second;
+      
+			NVM_DBG(this, "[rocky]: return vblk idx: " << vblk_idx  );
+			return entry.second;
 
     case kReserved:
     case kBad:
