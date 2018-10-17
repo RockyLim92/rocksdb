@@ -1,6 +1,7 @@
 #include "env_nvm.h"
 #include <exception>
 
+// rocky: defined params;
 #define PHYBLK_PER_VBLK 20
 #define NR_LUN_FOR_VBLK 2
 size_t PHYBLK_PER_LUN = PHYBLK_PER_VBLK/NR_LUN_FOR_VBLK;
@@ -299,6 +300,7 @@ struct nvm_vblk* NvmStore::get(void) {
       }
 
     case kOpen:
+      NVM_DBG(this, "[rocky]");
       entry.first = kReserved;
 
       if (!persist(mpath_).ok()) {
@@ -326,6 +328,8 @@ struct nvm_vblk* NvmStore::get_reserved(size_t blk_idx) {
   NVM_DBG(this, "LOCK !");
 
   std::pair<BlkState, struct nvm_vblk*> &entry = blks_[blk_idx];
+	NVM_DBG(this, "[rocky] blks_.size(" << blks_.size() << ")");
+  
 
   switch(entry.first) {
   case kReserved:

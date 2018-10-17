@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
 RBENCH_DEV_NAME='nvme0n1'
-RBENCH_BENCHMARKS='fillrandom'
+RBENCH_BENCHMARKS="readrandom,stats"
 RBENCH_DEV_MODE='nvm'
 
-RBENCH_USE_EXISTING_DB=0
+RBENCH_USE_EXISTING_DB=1
 
 if [ $UID != 0 ]; then
 	echo "You don't have sufficient privileges to run this script."
@@ -76,7 +76,7 @@ GB=$((1024 * MB))
 #RBENCH_CMD_PREFIX="taskset -c 0-$(nproc)"
 #RBENCH_CMD_PREFIX="valgrind"
 RBENCH_BIN="../db_bench"
-RBENCH_NUM=5000
+RBENCH_NUM=1000
 RBENCH_VALUE_SIZE=$((1 * MB))
 RBENCH_BLOCK_SIZE=$((64 * KB)) # 4k
 RBENCH_BLOOM_BITS=10

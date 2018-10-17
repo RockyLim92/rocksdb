@@ -11,6 +11,12 @@
 #include <execinfo.h>
 #ifndef NVM_TRACE
 #define NVM_TRACE 1
+
+// rocky: defined params;
+#define _PHYBLK_PER_VBLK 20
+#define _NR_LUN_FOR_VBLK 2
+size_t _PHYBLK_PER_LUN = _PHYBLK_PER_VBLK/_NR_LUN_FOR_VBLK;
+
 void nvm_trace_pr(void) {
   void *array[1024];
   size_t size;
@@ -78,8 +84,8 @@ NvmFile::NvmFile(
   // rocky: 여기 고쳐줘야 할 것 같은데
   align_nbytes_ = geo->nplanes * geo->nsectors * geo->sector_nbytes;
   //stripe_nbytes_ = align_nbytes_ * env_->store_->GetPunitCount();
-  stripe_nbytes_ = align_nbytes_ * 20;
-  blk_nbytes_ = stripe_nbytes_ * geo->npages;// 2GB 크기로 잡혀있음.
+  stripe_nbytes_ = align_nbytes_ * _PHYBLK_PER_VBLK;
+  blk_nbytes_ = stripe_nbytes_ * geo->npages;// 원래 2GB 크기로 잡혀있음.
 
   buf_nbytes_ = 0;                              // Setup buffer
   buf_nbytes_max_ = lu_bound_ * stripe_nbytes_;
@@ -313,9 +319,18 @@ Status NvmFile::wmeta(void) {
 		// 여기에 vblk을 구성하는 blk들 중 0번째 blk의 number를 저장한다.
     //NVM_DBG(this, "[rocky] nvm_vblk_get_addrs(blk)[0].g.blk: " << nvm_vblk_get_addrs(blk)[0].g.blk);
     
-    //vblk의 번호를 주어야 찾아갈 수 있다.
-    
-    meta << nvm_vblk_get_addrs(blk)[0].g.blk << std::endl;
+    // rocky
+		size_t vblk_ch = nvm_vblk_get_addrs(blk)[0].g.ch;
+		size_t vblk_lun = nvm_vblk_get_addrs(blk)[0].g.lun;
+	  
+    size_t st_lun_no = 16 * vblk_lun + vblk_ch;
+    size_t vblk_st_blk = nvm_vblk_get_addrs(blk)[0].g.blk;
+   
+		size_t no_vblk = (vblk_st_blk / _PHYBLK_PER_LUN) * (128 / _NR_LUN_FOR_VBLK) + (st_lun_no / _NR_LUN_FOR_VBLK);
+
+		NVM_DBG(this, "[rocky] no_vblk: " << no_vblk);
+   	meta << no_vblk << std::endl; 
+		//meta << nvm_vblk_get_addrs(blk)[0].g.blk << std::endl;
   }
 
   std::string content = meta.str();
@@ -389,11 +404,21 @@ Status NvmFile::Flush(bool padded) {
       NVM_DBG(this, "FAILED: reserving NVM");
       return Status::IOError("FAILED: reserving NVM");
     }
-		
-		// rocky: 이게 계속 0으로 들어가니 meta에서도 0으로만 나옴
+
+    // rocky
+		size_t vblk_ch = nvm_vblk_get_addrs(blk)[0].g.ch;
+		size_t vblk_lun = nvm_vblk_get_addrs(blk)[0].g.lun;
+	  
+    size_t st_lun_no = 16 * vblk_lun + vblk_ch;
+    size_t vblk_st_blk = nvm_vblk_get_addrs(blk)[0].g.blk;
+   
+		size_t no_vblk = (vblk_st_blk / _PHYBLK_PER_LUN) * (128 / _NR_LUN_FOR_VBLK) + (st_lun_no / _NR_LUN_FOR_VBLK);
+
+
 		NVM_DBG(this, "[rocky] ch: " << nvm_vblk_get_addrs(blk)[0].g.ch );
 		NVM_DBG(this, "[rocky] lun: " << nvm_vblk_get_addrs(blk)[0].g.lun );
 		NVM_DBG(this, "[rocky] blk: " << nvm_vblk_get_addrs(blk)[0].g.blk );
+		NVM_DBG(this, "[rocky] no_vblk: " << no_vblk);
       
     NVM_DBG(this, "blks_push_back(blk)");
 		blks_.push_back(blk);
@@ -521,7 +546,9 @@ Status NvmFile::pad_last_block(void) {
 Status NvmFile::Read(
   uint64_t offset, size_t n, Slice* result, char* scratch
 ) const {
-  NVM_DBG(this, "entry");
+  NVM_DBG(this, "[rocky] Read - fname(" << this->info_.fname() << ")");
+  
+	NVM_DBG(this, "entry");
   NVM_DBG(this, "offset(" << offset << ")-aligned(" << !(offset % align_nbytes_) << ")");
   NVM_DBG(this, "n(" << n << ")-aligned(" << !(n % align_nbytes_) << ")");
 
@@ -561,7 +588,22 @@ Status NvmFile::Read(
     uint64_t blk_idx = read_offset / blk_nbytes_;
     uint64_t blk_offset = read_offset % blk_nbytes_;
     struct nvm_vblk *blk = blks_[blk_idx];
-    NVM_DBG(this, "[rocky] blks_.size() " << blks_.size());
+    
+		#if 1
+		// 실제로 읽는 vblk
+		NVM_DBG(this, "[rocky] blks_.size() " << blks_.size());
+
+		size_t vblk_ch = nvm_vblk_get_addrs(blk)[0].g.ch;
+		size_t vblk_st_lun = nvm_vblk_get_addrs(blk)[0].g.lun;
+		size_t vblk_st_blk = nvm_vblk_get_addrs(blk)[0].g.blk;
+   
+		size_t no_vblk = (vblk_st_blk % _PHYBLK_PER_LUN) * (128/_NR_LUN_FOR_VBLK) + ((vblk_ch * 16) + vblk_st_lun) / _NR_LUN_FOR_VBLK;
+
+		NVM_DBG(this, "[rocky] ch: " << vblk_ch );
+		NVM_DBG(this, "[rocky] st_lun: " << vblk_st_lun );
+		NVM_DBG(this, "[rocky] st_blk: " << vblk_st_blk );
+		NVM_DBG(this, "[rocky] no_vblk: " << no_vblk);
+		#endif 
 
     uint64_t nbytes = std::min({
       nbytes_remaining,

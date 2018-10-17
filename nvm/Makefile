@@ -36,8 +36,7 @@ tags:
 dev: clean configure make
 
 rocks:
-	#cd .. && make release -j$(expr `nproc` - 2)
-	cd .. && make release -j8
+	cd .. && make release -j$(expr `nproc` - 2)
 
 .PHONY: hash
 hash:
