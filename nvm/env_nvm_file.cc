@@ -13,8 +13,8 @@
 #define NVM_TRACE 1
 
 // rocky: defined params;
-#define _PHYBLK_PER_VBLK 20
-#define _NR_LUN_FOR_VBLK 2
+#define _PHYBLK_PER_VBLK 128
+#define _NR_LUN_FOR_VBLK 64
 size_t _PHYBLK_PER_LUN = _PHYBLK_PER_VBLK/_NR_LUN_FOR_VBLK;
 
 void nvm_trace_pr(void) {
@@ -533,6 +533,7 @@ Status NvmFile::pad_last_block(void) {
 
     err = nvm_vblk_write(blks_[blk_idx], buf_, nbytes_pad);
     if (err < 0) {
+      NVM_DBG(this, "[rocky] nvm_vblk_write(blks_["<<blk_idx<< "], buf_, " << nbytes_pad << ")" );
       perror("nvm_vblk_pad");
       NVM_DBG(this, "FAILED: nvm_vblk_pad(...)");
       return Status::IOError("FAILED: nvm_vblk_pad(...)");

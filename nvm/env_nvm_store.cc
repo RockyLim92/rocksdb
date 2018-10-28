@@ -2,8 +2,8 @@
 #include <exception>
 
 // rocky: defined params;
-#define PHYBLK_PER_VBLK 20
-#define NR_LUN_FOR_VBLK 2
+#define PHYBLK_PER_VBLK 128
+#define NR_LUN_FOR_VBLK 64
 size_t PHYBLK_PER_LUN = PHYBLK_PER_VBLK/NR_LUN_FOR_VBLK;
 
 namespace rocksdb {
