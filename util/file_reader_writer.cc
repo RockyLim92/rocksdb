@@ -343,7 +343,7 @@ Status WritableFileWriter::WriteBuffered(const char* data, size_t size) {
   Status s;
   assert(!use_direct_io());
   const char* src = data;
-  size_t left = size;
+  size_t left = size; // rocky: 32k
 
   while (left > 0) {
     size_t allowed = RequestToken(left, false);

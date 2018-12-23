@@ -12,9 +12,9 @@
 #ifndef NVM_TRACE
 #define NVM_TRACE 1
 
-// rocky: defined params;
 #define _PHYBLK_PER_VBLK 128
-#define _NR_LUN_FOR_VBLK 64
+#define _NR_LUN_FOR_VBLK 128
+
 size_t _PHYBLK_PER_LUN = _PHYBLK_PER_VBLK/_NR_LUN_FOR_VBLK;
 
 void nvm_trace_pr(void) {
@@ -85,6 +85,7 @@ NvmFile::NvmFile(
   align_nbytes_ = geo->nplanes * geo->nsectors * geo->sector_nbytes;
   //stripe_nbytes_ = align_nbytes_ * env_->store_->GetPunitCount();
   stripe_nbytes_ = align_nbytes_ * _PHYBLK_PER_VBLK;
+  //stripe_nbytes_ = align_nbytes_ * _PHYBLK_PER_VBLK * 16;
   blk_nbytes_ = stripe_nbytes_ * geo->npages;// 원래 2GB 크기로 잡혀있음.
 
   buf_nbytes_ = 0;                              // Setup buffer
@@ -283,7 +284,7 @@ Status NvmFile::Append(const Slice& slice) {
     size_t avail = buf_nbytes_max_ - buf_nbytes_;
     size_t nbytes = std::min(nbytes_remaining, avail);
 
-    NVM_DBG(this, "avail(" << avail << ", nbytes(" << nbytes << ")");
+    NVM_DBG(this, "avail(" << avail << "), nbytes(" << nbytes << ")");
 
     memcpy(buf_ + buf_nbytes_, data + nbytes_written, nbytes);
 
@@ -377,6 +378,9 @@ Status NvmFile::Flush(bool padded) {
 
   // rocky: 여기다!!
   if (buf_nbytes_ < stripe_nbytes_) {
+    NVM_DBG(this, "stripe_nbytes_: " << stripe_nbytes_);
+    NVM_DBG(this, "buf_nbytes_: " << buf_nbytes_);
+    
     NVM_DBG(this, "Nothing to flush (buffer less than striped_nbytes_)");
     return Status::OK();
   }
@@ -534,7 +538,8 @@ Status NvmFile::pad_last_block(void) {
     err = nvm_vblk_write(blks_[blk_idx], buf_, nbytes_pad);
     if (err < 0) {
       NVM_DBG(this, "[rocky] nvm_vblk_write(blks_["<<blk_idx<< "], buf_, " << nbytes_pad << ")" );
-      perror("nvm_vblk_pad");
+      std::cout << "vblk_idx: " << blk_idx << "nbytes_pad: " << nbytes_pad << std::endl;
+			perror("nvm_vblk_pad");
       NVM_DBG(this, "FAILED: nvm_vblk_pad(...)");
       return Status::IOError("FAILED: nvm_vblk_pad(...)");
     }

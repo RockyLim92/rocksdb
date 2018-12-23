@@ -32,6 +32,13 @@ function rbench {
 	#	ARGS="$ARGS --use_direct_writes=$RBENCH_USE_DIRECT_WRITES"
 	#fi
 
+	
+	if [ "$RBENCH_BENCHMARKS" == "readrandomwriterandom, stats" ]; then	
+		if [ -n "$RBENCH_RPERCENT" ]; then
+			ARGS="$ARGS -readwritepercent=$RBENCH_RPERCENT"
+		fi
+	fi
+
 	if [ -n "$RBENCH_USE_DIRECT_IO_FOR_FLUSH_AND_COMPACTION" ]; then
 		ARGS="$ARGS --use_direct_io_for_flush_and_compaction=$RBENCH_USE_DIRECT_IO_FOR_FLUSH_AND_COMPACTION"
 	fi
@@ -142,6 +149,10 @@ function rbench {
 
 	if [ -n "$RBENCH_MAX_BACKGROUND_COMPACTIONS" ]; then
 		ARGS="$ARGS --max_background_compactions=$RBENCH_MAX_BACKGROUND_COMPACTIONS"
+	fi
+	
+	if [ -n "$RBENCH_MAX_BACKGROUND_FLUSHES" ]; then
+		ARGS="$ARGS --max_background_flushes=$RBENCH_MAX_BACKGROUND_FLUSHES"
 	fi
 
 	if [ -n "$RBENCH_MAX_GRANDPARENT_OVERLAP_FACTOR" ]; then

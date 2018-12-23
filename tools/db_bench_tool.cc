@@ -3342,7 +3342,11 @@ void VerifyDBFromDB(std::string& truth_db_name) {
     }
   }
 
+	// rocky: to profile this func
   void DoWrite(ThreadState* thread, WriteMode write_mode) {
+		DoWrite_internal(thread, write_mode);
+	}
+	void DoWrite_internal(ThreadState* thread, WriteMode write_mode) {
     const int test_duration = write_mode == RANDOM ? FLAGS_duration : 0;
     const int64_t num_ops = writes_ == 0 ? num_ : writes_;
 

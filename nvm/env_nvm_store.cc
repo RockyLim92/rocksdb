@@ -1,9 +1,9 @@
 #include "env_nvm.h"
 #include <exception>
 
-// rocky: defined params;
 #define PHYBLK_PER_VBLK 128
-#define NR_LUN_FOR_VBLK 64
+#define NR_LUN_FOR_VBLK 128
+
 size_t PHYBLK_PER_LUN = PHYBLK_PER_VBLK/NR_LUN_FOR_VBLK;
 
 namespace rocksdb {
@@ -17,6 +17,7 @@ namespace rocksdb {
 //  * Recovers only from nvm.meta
 //  * Erases upon get
 //
+
 NvmStore::NvmStore(
   EnvNVM* env,
   const std::string& dev_name,
@@ -199,7 +200,15 @@ Status NvmStore::recover(const std::string& mpath)
 
     for (vblk_idx = 0; meta >> line; ++vblk_idx) {
 
-      if ((vblk_idx+1) > ((geo_->nblocks)/PHYBLK_PER_VBLK)*punits_.size() ) {
+      if ( vblk_idx+1 > (geo_->nblocks) * punits_.size() / PHYBLK_PER_VBLK ) {
+				
+
+		 		NVM_DBG(this, "[rocky] geo_->nblocks " << geo_->nblocks);
+		 		NVM_DBG(this, "[rocky] PHYBLK_PER_VBLK " << PHYBLK_PER_VBLK);
+		 		NVM_DBG(this, "[rocky] punits_.size() " << punits_.size());
+
+		 		NVM_DBG(this, "[rocky] vblk_idx+1: " << vblk_idx+1);
+		 		NVM_DBG(this, "[rocky] (geo_->nblocks) * punits_.size() / PHYBLK_PER_VBLK: " << (geo_->nblocks) * punits_.size() / PHYBLK_PER_VBLK );
         NVM_DBG(this, "FAILED: Block count exceeding geometry");
         return Status::IOError("FAILED: Block count exceeding geometry");
       }
@@ -221,7 +230,7 @@ Status NvmStore::recover(const std::string& mpath)
       }
     }
 
-    if (vblk_idx != ((geo_->nblocks)/PHYBLK_PER_VBLK)*punits_.size()) {
+    if (vblk_idx != (geo_->nblocks) * punits_.size() / PHYBLK_PER_VBLK ) {
       NVM_DBG(this, "FAILED: Insufficient block count");
       return Status::IOError("FAILED: Insufficient block count");
     }
@@ -329,6 +338,7 @@ struct nvm_vblk* NvmStore::get_reserved(size_t blk_idx) {
 
   std::pair<BlkState, struct nvm_vblk*> &entry = blks_[blk_idx];
 	NVM_DBG(this, "[rocky] blks_.size(" << blks_.size() << ")");
+	NVM_DBG(this, "[rocky] blk_idx(" << blk_idx << ")");
   
 
   switch(entry.first) {
