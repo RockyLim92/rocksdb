@@ -1,3 +1,7 @@
+//#ifndef __PROFILE_H__
+
+//#define __PROFILE_H__
+
 //function level profiling
 #define BILLION     (1000000001ULL)
 #define calclock(timevalue, total_time, total_count, delay_time) do { \
@@ -18,4 +22,8 @@
 } while(0)
 
 //Global function time/count variables
-unsigned long long total_time, total_count;
+extern unsigned long long total_time_DW, total_count_DW;
+extern unsigned long long total_time_WAL, total_count_WAL;
+
+//#endif
+

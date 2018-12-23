@@ -730,6 +730,10 @@ class DBImpl : public DB {
   Status WriteToWAL(const autovector<WriteThread::Writer*>& write_group,
                     log::Writer* log_writer, bool need_log_sync,
                     bool need_log_dir_sync, SequenceNumber sequence);
+  // rocky: to profile 
+  Status WriteToWAL_internal(const autovector<WriteThread::Writer*>& write_group,
+		  log::Writer* log_writer, bool need_log_sync,
+		  bool need_log_dir_sync, SequenceNumber sequence);
 
 #ifndef ROCKSDB_LITE
 

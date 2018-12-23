@@ -69,6 +69,9 @@
 #include "utilities/blob_db/blob_db.h"
 #include "utilities/merge_operators.h"
 #include "utilities/persistent_cache/block_cache_tier.h"
+#include "profile/profile.h" // rocky: profile.h
+
+unsigned long long total_time_DW, total_count_DW;
 
 #ifdef OS_WIN
 #include <io.h>  // open/close
@@ -3344,7 +3347,17 @@ void VerifyDBFromDB(std::string& truth_db_name) {
 
 	// rocky: to profile this func
   void DoWrite(ThreadState* thread, WriteMode write_mode) {
+		struct timespec local_time[2];
+		unsigned long long delay_time;
+		clock_gettime(CLOCK_MONOTONIC, &local_time[0]);
+
 		DoWrite_internal(thread, write_mode);
+	
+		clock_gettime(CLOCK_MONOTONIC, &local_time[1]);
+		calclock(local_time, &total_time_DW, &total_count_DW, &delay_time );
+		printf("[DoWrite] elapsed time: %llu,  total_time_DW: %llu, total_count: %llu\n", delay_time, total_time_DW, total_count_DW);
+	
+		printf("[WriteTOWAL] total_time_DW: %llu, total_count: %llu\n", total_time_WAL, total_count_WAL);
 	}
 	void DoWrite_internal(ThreadState* thread, WriteMode write_mode) {
     const int test_duration = write_mode == RANDOM ? FLAGS_duration : 0;

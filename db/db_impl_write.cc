@@ -15,6 +15,9 @@
 #include "monitoring/perf_context_imp.h"
 #include "options/options_helper.h"
 #include "util/sync_point.h"
+#include "profile/profile.h"
+
+unsigned long long total_time_WAL, total_count_WAL;
 
 namespace rocksdb {
 // Convenience methods
@@ -371,6 +374,22 @@ Status DBImpl::PreprocessWrite(const WriteOptions& write_options,
 
 Status DBImpl::WriteToWAL(const autovector<WriteThread::Writer*>& write_group,
                           log::Writer* log_writer, bool need_log_sync,
+                          bool need_log_dir_sync, SequenceNumber sequence) {
+  
+	struct timespec local_time[2];
+	unsigned long long delay_time;
+	clock_gettime(CLOCK_MONOTONIC, &local_time[0]);
+	
+	Status status;
+	status = DBImpl::WriteToWAL_internal(write_group, log_writer, need_log_sync, need_log_dir_sync, sequence);
+	
+	clock_gettime(CLOCK_MONOTONIC, &local_time[1]);
+	calclock(local_time, &total_time_WAL, &total_count_WAL, &delay_time );
+	return status;
+}
+
+Status DBImpl::WriteToWAL_internal(const autovector<WriteThread::Writer*>& write_group,
+                           log::Writer* log_writer, bool need_log_sync,
                           bool need_log_dir_sync, SequenceNumber sequence) {
   Status status;
 
