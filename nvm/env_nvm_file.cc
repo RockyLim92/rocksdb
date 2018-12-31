@@ -8,6 +8,9 @@
 #include "env_nvm.h"
 #include <liblightnvm.h>
 
+#include "profile/profile.h"
+
+
 #include <execinfo.h>
 #ifndef NVM_TRACE
 #define NVM_TRACE 1
@@ -16,6 +19,10 @@
 #define _NR_LUN_FOR_VBLK 128
 
 size_t _PHYBLK_PER_LUN = _PHYBLK_PER_VBLK/_NR_LUN_FOR_VBLK;
+
+unsigned long long total_time_read, total_count_read;
+unsigned long long total_time_write, total_count_write;
+unsigned long long total_time_pad, total_count_pad;
 
 void nvm_trace_pr(void) {
   void *array[1024];
@@ -46,9 +53,7 @@ NvmFile::NvmFile(
 
   const struct nvm_geo *geo = nvm_dev_get_geo(env_->store_->GetDev());
 
-	// rocky: *.sst.meta 파일이 있으면 읽음.
   if (env_->posix_->FileExists(mpath_).ok()) {          // Read meta from file
-		NVM_DBG(this, "[rocky] read meta from file");
     std::string content;
     size_t blk_idx;
 
@@ -75,7 +80,6 @@ NvmFile::NvmFile(
         throw std::runtime_error("FAILED: allocating vblk");
       }
   
-			// rocky: 왜 일로 안들어가지?
       NVM_DBG(this, "blks_push_back(blk)");
       blks_.push_back(blk);
     }
@@ -84,8 +88,7 @@ NvmFile::NvmFile(
   // rocky: 여기 고쳐줘야 할 것 같은데
   align_nbytes_ = geo->nplanes * geo->nsectors * geo->sector_nbytes;
   //stripe_nbytes_ = align_nbytes_ * env_->store_->GetPunitCount();
-  stripe_nbytes_ = align_nbytes_ * _PHYBLK_PER_VBLK;
-  //stripe_nbytes_ = align_nbytes_ * _PHYBLK_PER_VBLK * 16;
+  stripe_nbytes_ = align_nbytes_ * _PHYBLK_PER_VBLK; // rocky: WHAT IS THE STRIPE_NBYTES?
   blk_nbytes_ = stripe_nbytes_ * geo->npages;// 원래 2GB 크기로 잡혀있음.
 
   buf_nbytes_ = 0;                              // Setup buffer
@@ -317,10 +320,10 @@ Status NvmFile::wmeta(void) {
     if (!blk)
       continue;
 		
-		// 여기에 vblk을 구성하는 blk들 중 0번째 blk의 number를 저장한다.
-    //NVM_DBG(this, "[rocky] nvm_vblk_get_addrs(blk)[0].g.blk: " << nvm_vblk_get_addrs(blk)[0].g.blk);
-    
     // rocky
+		// 여기에 vblk을 구성하는 blk들 중 0번째 blk의 number를 저장한다.
+    // NVM_DBG(this, "[rocky] nvm_vblk_get_addrs(blk)[0].g.blk: " << nvm_vblk_get_addrs(blk)[0].g.blk);
+    
 		size_t vblk_ch = nvm_vblk_get_addrs(blk)[0].g.ch;
 		size_t vblk_lun = nvm_vblk_get_addrs(blk)[0].g.lun;
 	  
@@ -346,7 +349,25 @@ Status NvmFile::Flush(void) {
   return Flush(false);
 }
 
+#if 1
+// rocky: profile
 Status NvmFile::Flush(bool padded) {
+	
+	struct timespec local_time[2];
+	unsigned long long delay_time;
+	clock_gettime(CLOCK_MONOTONIC, &local_time[0]);
+
+	Status res;
+	res = NvmFile::Flush_internal(padded);
+
+	clock_gettime(CLOCK_MONOTONIC, &local_time[1]);
+	calclock(local_time, &total_time_write, &total_count_write, &delay_time);
+
+	return res;
+}
+#endif
+
+Status NvmFile::Flush_internal(bool padded) {
   NVM_DBG(this, "padded(" << padded << ")");
 
   size_t pad_nbytes = 0;
@@ -376,7 +397,7 @@ Status NvmFile::Flush(bool padded) {
     return Status::OK();
   }*/
 
-  // rocky: 여기다!!
+  // rocky: buf_nbytes_ < stripe_nbytes_
   if (buf_nbytes_ < stripe_nbytes_) {
     NVM_DBG(this, "stripe_nbytes_: " << stripe_nbytes_);
     NVM_DBG(this, "buf_nbytes_: " << buf_nbytes_);
@@ -402,7 +423,6 @@ Status NvmFile::Flush(bool padded) {
   while (blks_.size() <= (fsize_ / blk_nbytes_)) {
     struct nvm_vblk *blk;
 
-    // rocky: get!!
     blk = env_->store_->get();
     if (!blk) {
       NVM_DBG(this, "FAILED: reserving NVM");
@@ -419,10 +439,10 @@ Status NvmFile::Flush(bool padded) {
 		size_t no_vblk = (vblk_st_blk / _PHYBLK_PER_LUN) * (128 / _NR_LUN_FOR_VBLK) + (st_lun_no / _NR_LUN_FOR_VBLK);
 
 
-		NVM_DBG(this, "[rocky] ch: " << nvm_vblk_get_addrs(blk)[0].g.ch );
-		NVM_DBG(this, "[rocky] lun: " << nvm_vblk_get_addrs(blk)[0].g.lun );
-		NVM_DBG(this, "[rocky] blk: " << nvm_vblk_get_addrs(blk)[0].g.blk );
-		NVM_DBG(this, "[rocky] no_vblk: " << no_vblk);
+		//NVM_DBG(this, "[rocky] ch: " << nvm_vblk_get_addrs(blk)[0].g.ch );
+		//NVM_DBG(this, "[rocky] lun: " << nvm_vblk_get_addrs(blk)[0].g.lun );
+		//NVM_DBG(this, "[rocky] blk: " << nvm_vblk_get_addrs(blk)[0].g.blk );
+		//NVM_DBG(this, "[rocky] no_vblk: " << no_vblk);
       
     NVM_DBG(this, "blks_push_back(blk)");
 		blks_.push_back(blk);
@@ -512,7 +532,24 @@ Status NvmFile::Truncate(uint64_t size) {
   return wmeta();
 }
 
+#if 1
+// rocky: profile
 Status NvmFile::pad_last_block(void) {
+	
+	struct timespec local_time[2];
+	unsigned long long delay_time;
+	clock_gettime(CLOCK_MONOTONIC, &local_time[0]);
+
+	Status res = NvmFile::pad_last_block_internal();
+
+	clock_gettime(CLOCK_MONOTONIC, &local_time[1]);
+	calclock(local_time, &total_time_pad, &total_count_pad, &delay_time);
+	
+	return res;
+}
+#endif
+
+Status NvmFile::pad_last_block_internal(void) {
   NVM_DBG(this, "...");
 
   if (!fsize_) {
@@ -549,14 +586,35 @@ Status NvmFile::pad_last_block(void) {
 }
 
 // Used by SequentialFile, RandomAccessFile
+
+#if 1
+// rocky: profile
 Status NvmFile::Read(
   uint64_t offset, size_t n, Slice* result, char* scratch
 ) const {
-  NVM_DBG(this, "[rocky] Read - fname(" << this->info_.fname() << ")");
-  
+
+	struct timespec local_time[2];
+	unsigned long long delay_time;
+	clock_gettime(CLOCK_MONOTONIC, &local_time[0]);
+
+	Status res = NvmFile::Read_internal(offset, n, result, scratch);
+
+	clock_gettime(CLOCK_MONOTONIC, &local_time[1]);
+	calclock(local_time, &total_time_read, &total_count_read, &delay_time);
+	
+	return res;
+}
+#endif
+
+Status NvmFile::Read_internal(
+  uint64_t offset, size_t n, Slice* result, char* scratch
+) const {
+  /*
+	NVM_DBG(this, "[rocky] Read - fname(" << this->info_.fname() << ")");
 	NVM_DBG(this, "entry");
   NVM_DBG(this, "offset(" << offset << ")-aligned(" << !(offset % align_nbytes_) << ")");
   NVM_DBG(this, "n(" << n << ")-aligned(" << !(n % align_nbytes_) << ")");
+	*/
 
   // n is the MAX number of bytes to read, since it is the size of the scratch
   // memory. However, there might be n, less than n, or more than n bytes in the
@@ -595,7 +653,7 @@ Status NvmFile::Read(
     uint64_t blk_offset = read_offset % blk_nbytes_;
     struct nvm_vblk *blk = blks_[blk_idx];
     
-		#if 1
+		#if 0
 		// 실제로 읽는 vblk
 		NVM_DBG(this, "[rocky] blks_.size() " << blks_.size());
 
@@ -625,8 +683,11 @@ Status NvmFile::Read(
     NVM_DBG(this, "=nbytes_read(" << nbytes_read << ")");
     NVM_DBG(this, "=read_offset(" << read_offset << ")");
 
-    ssize_t ret = nvm_vblk_pread(blk, buf_, nbytes, blk_offset);
-    if (ret < 0) {
+    
+		ssize_t ret = nvm_vblk_pread(blk, buf_, nbytes, blk_offset);
+    
+		
+		if (ret < 0) {
       perror("nvm_vblk_pread");
       NVM_DBG(this, "FAILED: nvm_vblk_read");
       return Status::IOError("FAILED: nvm_vblk_read");

@@ -21,6 +21,10 @@
 #include "util/sst_file_manager_impl.h"
 #include "util/sync_point.h"
 
+#include "profile/profile.h"
+
+unsigned long long total_time_com, total_count_com;
+
 namespace rocksdb {
 Status DBImpl::SyncClosedLogs(JobContext* job_context) {
   TEST_SYNC_POINT("DBImpl::SyncClosedLogs:Start");
@@ -1257,8 +1261,7 @@ void DBImpl::BackgroundCallCompaction(void* arg) {
         CaptureCurrentFileNumberInPendingOutputs();
 
     assert(bg_compaction_scheduled_);
-    Status s =
-        BackgroundCompaction(&made_progress, &job_context, &log_buffer, m);
+    Status s = BackgroundCompaction(&made_progress, &job_context, &log_buffer, m);
     TEST_SYNC_POINT("BackgroundCallCompaction:1");
     if (!s.ok() && !s.IsShutdownInProgress()) {
       // Wait a little bit before retrying background compaction in
@@ -1327,7 +1330,24 @@ void DBImpl::BackgroundCallCompaction(void* arg) {
   }
 }
 
+// rocky: background compaction
 Status DBImpl::BackgroundCompaction(bool* made_progress,
+                                    JobContext* job_context,
+                                    LogBuffer* log_buffer, void* arg) {
+
+	struct timespec local_time[2];
+	unsigned long long delay_time;
+	clock_gettime(CLOCK_MONOTONIC, &local_time[0]);
+	
+	Status status;
+	status = DBImpl::BackgroundCompaction_internal(made_progress, job_context, log_buffer, arg);
+	
+	clock_gettime(CLOCK_MONOTONIC, &local_time[1]);
+	calclock(local_time, &total_time_com, &total_count_com, &delay_time );
+	return status;
+
+}
+Status DBImpl::BackgroundCompaction_internal(bool* made_progress,
                                     JobContext* job_context,
                                     LogBuffer* log_buffer, void* arg) {
   ManualCompaction* manual_compaction =

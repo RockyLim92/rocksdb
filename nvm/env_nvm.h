@@ -210,6 +210,11 @@ public:
   Status Flush(bool padded);
   Status Flush(void);
 
+  // rocky: profile
+  Status Flush_internal(bool padded);
+  Status Read_internal(uint64_t offset, size_t n, Slice* result, char* scratch) const;
+  Status pad_last_block_internal(void);
+
   void Rename(const std::string& fname);
   void PrepareWrite(size_t offset, size_t len);
 

@@ -336,7 +336,7 @@ Status EnvNVM::GetFileSize(const std::string& fpath, uint64_t* fsize) {
 
   NvmFile *file = FindFileUnguarded(info);
   if (!file) {
-    return Status::IOError("File not not found");
+    return Status::IOError("File not found");
   }
 
   *fsize = file->GetFileSize();

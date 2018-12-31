@@ -24,6 +24,11 @@
 //Global function time/count variables
 extern unsigned long long total_time_DW, total_count_DW;
 extern unsigned long long total_time_WAL, total_count_WAL;
+extern unsigned long long total_time_read, total_count_read;
+extern unsigned long long total_time_write, total_count_write;
+extern unsigned long long total_time_pad, total_count_pad;
+extern unsigned long long total_time_com, total_count_com;
+
 
 //#endif
 

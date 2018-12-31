@@ -730,7 +730,7 @@ class DBImpl : public DB {
   Status WriteToWAL(const autovector<WriteThread::Writer*>& write_group,
                     log::Writer* log_writer, bool need_log_sync,
                     bool need_log_dir_sync, SequenceNumber sequence);
-  // rocky: to profile 
+  // rocky: profile 
   Status WriteToWAL_internal(const autovector<WriteThread::Writer*>& write_group,
 		  log::Writer* log_writer, bool need_log_sync,
 		  bool need_log_dir_sync, SequenceNumber sequence);
@@ -767,9 +767,14 @@ class DBImpl : public DB {
   void BackgroundCallCompaction(void* arg);
   void BackgroundCallFlush();
   void BackgroundCallPurge();
-  Status BackgroundCompaction(bool* madeProgress, JobContext* job_context,
+  
+	// rocky: profile
+	Status BackgroundCompaction_internal(bool* madeProgress, JobContext* job_context,
                               LogBuffer* log_buffer, void* m = 0);
-  Status BackgroundFlush(bool* madeProgress, JobContext* job_context,
+	Status BackgroundCompaction(bool* madeProgress, JobContext* job_context,
+                              LogBuffer* log_buffer, void* m = 0);
+  
+	Status BackgroundFlush(bool* madeProgress, JobContext* job_context,
                          LogBuffer* log_buffer);
 
   void PrintStatistics();
